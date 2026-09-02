@@ -1,4 +1,4 @@
-<!UpstageCo attendance app html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -10,7 +10,7 @@
     --panel:#1B212A;
     --panel-2:#232B36;
     --line:#2C3542;
-    --accent:#f4e5dd;
+    --accent:#FF6B1A;
     --accent-dim:#3A2417;
     --ok:#2FD97B;
     --ok-dim:#123321;
@@ -130,7 +130,7 @@
    production build would need to change.
    ===================================================================== */
 
-const KEY = "upstage_track_db_v1";
+const KEY = "upstage_track_db_v2";
 
 function uid(prefix){ return prefix + "_" + Math.random().toString(36).slice(2,9); }
 function nowISO(){ return new Date().toISOString(); }
@@ -1152,14 +1152,22 @@ function screenAdminDash(){
   </div>`;
 }
 
+function visibleEmployeeList(){
+  const role = DB.session.role;
+  const all = DB.employees.filter(e=>e.permission==="Employee"||e.permission==="Manager");
+  if(role==="Manager") return all.filter(e=> e.manager===DB.session.name || e.id===DB.session.employeeId);
+  return all;
+}
 function screenAdminEmployees(){
+  const list = visibleEmployeeList();
+  const canAdd = DB.session.role!=="Manager";
   return `
-  <div class="topbar"><div class="h2">Employees</div><button class="btn btn-accent btn-sm" id="addEmp">+ Add Employee</button></div>
+  <div class="topbar"><div class="h2">Employees</div>${canAdd?'<button class="btn btn-accent btn-sm" id="addEmp">+ Add Employee</button>':''}</div>
   <div class="content">
     <table>
-      <tr><th>Name</th><th>Role</th><th>Dept</th><th>Status</th><th></th></tr>
-      ${DB.employees.map(e=>`<tr style="cursor:pointer;" data-emp="${e.id}">
-        <td>${escapeHtml(e.name)}</td><td>${escapeHtml(e.role)}</td><td>${escapeHtml(e.department)}</td>
+      <tr><th>ID</th><th>Name</th><th>Role</th><th>Dept</th><th>Status</th><th></th></tr>
+      ${list.map(e=>`<tr style="cursor:pointer;" data-emp="${e.id}">
+        <td>${escapeHtml(e.empId||'—')}</td><td>${escapeHtml(e.name)}</td><td>${escapeHtml(e.role)}</td><td>${escapeHtml(e.department)}</td>
         <td>${e.status==='active'?'<span class="pill pill-ok">Active</span>':'<span class="pill pill-danger">Disabled</span>'}</td>
         <td><span class="link small">View →</span></td>
       </tr>`).join("")}
@@ -1170,22 +1178,34 @@ function screenAdminEmployeeDetail(){
   const e = DB.employees.find(x=>x.id===route.id);
   const recs = DB.attendance.filter(a=>a.employeeId===e.id).sort((a,b)=>new Date(b.timeIn)-new Date(a.timeIn));
   const weekMin = weeklyNetMinutes(e.id, startOfWeek());
+  const canManage = DB.session.role!=="Manager";
+  const canSeeRate = DB.session.role==="Admin"||DB.session.role==="Super Admin"||DB.session.role==="Payroll";
   return `
   <div class="topbar"><button class="backbtn" id="back">← Back</button><div class="h2">${escapeHtml(e.name)}</div><div style="width:40px"></div></div>
   <div class="content">
     <div class="card row gap-12" style="margin-bottom:16px;">
       <div class="avatar">${initials(e.name)}</div>
-      <div><div class="h2">${escapeHtml(e.name)}</div><div class="muted small">${escapeHtml(e.role)} · ${escapeHtml(e.department)} · ${escapeHtml(e.payCategory)}</div></div>
+      <div><div class="h2">${escapeHtml(e.name)}</div><div class="muted small">${escapeHtml(e.role)} · ${escapeHtml(e.department)} · ${escapeHtml(e.employmentType||e.payCategory)}</div></div>
+    </div>
+    <div class="card col gap-8" style="margin-bottom:16px;">
+      <div class="row-between small"><span class="muted">Employee ID</span><b>${escapeHtml(e.empId||'—')}</b></div>
+      <div class="row-between small"><span class="muted">Position</span><b>${escapeHtml(e.role)}</b></div>
+      <div class="row-between small"><span class="muted">Department</span><b>${escapeHtml(e.department)}</b></div>
+      <div class="row-between small"><span class="muted">Employment type</span><b>${escapeHtml(e.employmentType||'—')}</b></div>
+      ${canSeeRate? `<div class="row-between small"><span class="muted">Hourly rate</span><b>${e.hourlyRate?'$'+e.hourlyRate.toFixed(2):'—'}</b></div>`:""}
+      <div class="row-between small"><span class="muted">Manager</span><b>${escapeHtml(e.manager||'—')}</b></div>
+      <div class="row-between small"><span class="muted">Default location</span><b>${escapeHtml(e.defaultLocation||'—')}</b></div>
+      <div class="row-between small"><span class="muted">Permission level</span><b>${escapeHtml(e.permission)}</b></div>
     </div>
     <div class="grid2" style="margin-bottom:16px;">
       <div class="kpi"><div class="num">${hm(weekMin)}</div><div class="lab">Hours this week</div></div>
       <div class="kpi"><div class="num">${statusPill(empStatus(e.id))}</div><div class="lab">Current status</div></div>
     </div>
-    <div class="flexwrap" style="margin-bottom:16px;">
+    ${canManage? `<div class="flexwrap" style="margin-bottom:16px;">
       <button class="btn btn-ghost btn-sm" id="resetPin">Reset PIN</button>
       <button class="btn ${e.status==='active'?'btn-outline-danger':'btn-ok'} btn-sm" id="toggleActive">${e.status==='active'?'Disable Employee':'Re-enable Employee'}</button>
       <button class="btn btn-ghost btn-sm" id="manualEntry">+ Manual Attendance Entry</button>
-    </div>
+    </div>`:""}
     <div class="h3" style="margin-bottom:10px;">ATTENDANCE RECORDS</div>
     ${recs.map(a=>`<div class="card card-tight" style="margin-bottom:8px;cursor:pointer;" data-att="${a.id}">
       <div class="row-between"><b class="small">${fmtDate(a.timeIn)}</b>${attStatusPill(a.status)}</div>
@@ -1364,25 +1384,118 @@ function screenAdminTimesheets(){
 }
 
 function screenAdminReports(){
-  const empOpts = DB.employees.map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("");
+  const empOpts = DB.employees.filter(e=>e.permission==="Employee"||e.permission==="Manager").map(e=>`<option value="${e.id}">${escapeHtml(e.name)}</option>`).join("");
   const jobOpts = DB.jobs.map(j=>`<option value="${j.id}">${escapeHtml(j.name)}</option>`).join("");
+  const deptOpts = [...new Set(DB.employees.map(e=>e.department))].map(d=>`<option value="${d}">${escapeHtml(d)}</option>`).join("");
+  const reportTypes = [
+    ["attendance","Attendance"],["job-labour","Job Labour"],["department","Department"],
+    ["late","Late Arrivals"],["missing","Missing Clock Out"],["overtime","Overtime"],["location","Location Exceptions"]
+  ];
   return `
   <div class="topbar"><div class="h2">Reports</div></div>
   <div class="content">
+    <div class="field">
+      <label>Report type</label>
+      <select id="repType">${reportTypes.map(([k,l])=>`<option value="${k}">${l}</option>`).join("")}</select>
+    </div>
     <div class="card col gap-12" style="margin-bottom:16px;">
       <div class="grid2">
         <div><label>Employee</label><select id="repEmp"><option value="">All</option>${empOpts}</select></div>
         <div><label>Job</label><select id="repJob"><option value="">All</option>${jobOpts}</select></div>
       </div>
       <div class="grid2">
+        <div><label>Department</label><select id="repDept"><option value="">All</option>${deptOpts}</select></div>
+        <div><label>Status</label><select id="repStatus"><option value="">All</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="corrected">Corrected</option><option value="open">Open</option></select></div>
+      </div>
+      <div class="grid2">
         <div><label>From</label><input type="date" id="repFrom"></div>
         <div><label>To</label><input type="date" id="repTo"></div>
       </div>
-      <div><label>Status</label><select id="repStatus"><option value="">All</option><option value="draft">Draft</option><option value="submitted">Submitted</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="corrected">Corrected</option><option value="open">Open</option></select></div>
       <button class="btn btn-accent btn-block" id="runReport">Run Report</button>
     </div>
     <div id="reportResults"></div>
   </div>`;
+}
+
+function payrollRows(fromDate, toDate){
+  const from = fromDate? new Date(fromDate) : startOfWeek();
+  const to = toDate? new Date(toDate+"T23:59:59") : new Date();
+  const emps = DB.employees.filter(e=>e.permission==="Employee"||e.permission==="Manager");
+  const otThreshold = DB.settings.overtimeThresholdHrs*60;
+  return emps.map(e=>{
+    const recs = DB.attendance.filter(a=>a.employeeId===e.id && (a.status==="approved"||a.status==="corrected") && new Date(a.timeIn)>=from && new Date(a.timeIn)<=to);
+    let regular=0, ot=0;
+    recs.forEach(a=>{
+      const g = a.grossMin||0;
+      if(g>otThreshold){ regular += otThreshold; ot += g-otThreshold; }
+      else regular += g;
+    });
+    // convert gross-based regular/ot roughly to net-adjusted using unpaid break ratio
+    const totalNet = recs.reduce((s,a)=>s+(a.netMin||0),0);
+    const totalGross = recs.reduce((s,a)=>s+(a.grossMin||0),0) || 1;
+    const scale = totalGross? totalNet/totalGross : 1;
+    return {emp:e, regular: regular*scale/60, ot: ot*scale/60, total: totalNet/60, shifts: recs.length};
+  }).filter(r=>r.shifts>0);
+}
+function screenAdminPayroll(){
+  return `
+  <div class="topbar"><div class="h2">Payroll Export</div></div>
+  <div class="content">
+    <div class="card col gap-12" style="margin-bottom:16px;">
+      <div class="grid2">
+        <div><label>From</label><input type="date" id="payFrom" value="${startOfWeek().toISOString().slice(0,10)}"></div>
+        <div><label>To</label><input type="date" id="payTo" value="${new Date().toISOString().slice(0,10)}"></div>
+      </div>
+      <button class="btn btn-accent btn-block" id="runPayroll">Generate Payroll Summary</button>
+    </div>
+    <div class="tiny muted" style="margin-bottom:14px;">Only <b>approved</b> and <b>corrected</b> timesheets are included — draft, submitted, rejected and open shifts are excluded until approved.</div>
+    <div id="payrollResults"></div>
+  </div>`;
+}
+
+function screenAdminNotifications(){
+  const notifs = buildNotifications();
+  return `
+  <div class="topbar"><div class="h2">Alerts &amp; Notifications</div></div>
+  <div class="content">
+    ${notifs.length===0? `<div class="empty">No active alerts. Everything looks on track.</div>`:""}
+    ${notifs.map(n=>`<div class="card card-tight" style="margin-bottom:8px;border-color:${n.color};">
+      <div class="row-between"><b class="small">${n.icon} ${escapeHtml(n.title)}</b><span class="tiny muted">${escapeHtml(n.time)}</span></div>
+      <div class="small muted" style="margin-top:3px;">${escapeHtml(n.detail)}</div>
+    </div>`).join("")}
+    <div class="h3" style="margin:20px 0 10px;">NOTIFICATION SETTINGS</div>
+    <a class="link small" data-nav="admin-settings">Configure which alerts are enabled →</a>
+  </div>`;
+}
+function buildNotifications(){
+  const list = [];
+  const s = DB.settings.notifications;
+  const otThreshold = DB.settings.overtimeThresholdHrs*60;
+  DB.attendance.forEach(a=>{
+    const emp = DB.employees.find(e=>e.id===a.employeeId); if(!emp || emp.permission!=="Employee" && emp.permission!=="Manager") return;
+    if(s.forgotTimeOut && !a.timeOut && !sameDay(a.timeIn,new Date())){
+      list.push({icon:"⚠️", color:"var(--danger)", title:"Missing Clock Out", detail:`${emp.name} has not clocked out. Last recorded: ${fmtTime(a.timeIn)} on ${fmtDate(a.timeIn)}.`, time:fmtDateShort(a.timeIn)});
+    }
+    if(a.grossMin && a.grossMin>otThreshold){
+      list.push({icon:"⏱", color:"var(--warn)", title:"Overtime", detail:`${emp.name} worked ${hm(a.grossMin)} on ${fmtDate(a.timeIn)} — ${hm(a.grossMin-otThreshold)} over threshold.`, time:fmtDateShort(a.timeIn)});
+    }
+    if(sameDay(a.timeIn,new Date())){
+      const t = new Date(a.timeIn);
+      if(t.getHours()>8 || (t.getHours()===8 && t.getMinutes()>DB.settings.lateThresholdMin)){
+        list.push({icon:"🔴", color:"var(--danger)", title:"Late Arrival", detail:`${emp.name} clocked in at ${fmtTime(a.timeIn)} today.`, time:"Today"});
+      }
+    }
+    if(s.timesheetApproved && a.status==="submitted"){
+      list.push({icon:"🔔", color:"var(--warn)", title:"Timesheet Awaiting Approval", detail:`${emp.name}'s shift on ${fmtDate(a.timeIn)} is submitted and awaiting your review.`, time:fmtDateShort(a.timeIn)});
+    }
+    if(s.timesheetRejected && a.status==="rejected"){
+      list.push({icon:"✖", color:"var(--danger)", title:"Timesheet Rejected", detail:`${emp.name}'s shift on ${fmtDate(a.timeIn)} was rejected: ${a.rejectReason||''}`, time:fmtDateShort(a.timeIn)});
+    }
+  });
+  if(s.xeroSyncFailure && !DB.settings.xero.connected){
+    // informational only, not a failure — omit unless actually attempted
+  }
+  return list.sort((a,b)=> (a.title<b.title?1:-1));
 }
 
 function screenAdminAudit(){
@@ -1536,6 +1649,27 @@ function bindAdminScreen(){
   if($("reqGallery")) $("reqGallery").onchange = ()=>{ DB.settings.galleryUploadAllowed=$("reqGallery").checked; save(); };
 
   if($("runReport")) $("runReport").onclick = runReport;
+  if($("runPayroll")) $("runPayroll").onclick = ()=>{
+    const from = $("payFrom").value, to = $("payTo").value;
+    const rows = payrollRows(from, to);
+    window.__payrollRows = rows;
+    document.getElementById("payrollResults").innerHTML = `
+      <table>
+        <tr><th>Employee ID</th><th>Employee</th><th>Regular</th><th>OT</th><th>Total</th></tr>
+        ${rows.map(r=>`<tr><td>${escapeHtml(r.emp.empId)}</td><td>${escapeHtml(r.emp.name)}</td><td>${r.regular.toFixed(2)}</td><td>${r.ot.toFixed(2)}</td><td><b>${r.total.toFixed(2)}</b></td></tr>`).join("")}
+        ${rows.length===0? `<tr><td colspan="5" class="muted" style="text-align:center;padding:16px;">No approved timesheets in this range</td></tr>`:""}
+      </table>
+      <button class="btn btn-ghost btn-block" style="margin-top:14px;" id="payExport">Export Payroll CSV</button>
+    `;
+    document.getElementById("payExport").onclick = ()=>{
+      const lines = ["Employee ID,Employee,Regular,OT,Total", ...rows.map(r=>`"${r.emp.empId}","${r.emp.name}",${r.regular.toFixed(2)},${r.ot.toFixed(2)},${r.total.toFixed(2)}`)];
+      const blob = new Blob([lines.join("\n")], {type:"text/csv"});
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a"); link.href=url; link.download="upstage_payroll_export.csv"; link.click();
+      audit(DB.session.name,"Exported payroll","Payroll",`${rows.length} employees, ${from} to ${to}`); save();
+      toast("Payroll CSV exported");
+    };
+  };
 }
 
 function setAttStatus(attId, status){
@@ -1632,10 +1766,18 @@ function modalAddEmployee(){
   wrap.innerHTML = `<div class="modal">
     <div class="h2" style="margin-bottom:14px;">Add Employee</div>
     <div class="field"><label>Full name</label><input id="neName" placeholder="e.g. Sam Delacroix"></div>
-    <div class="field"><label>Role</label><input id="neRole" placeholder="e.g. Rigger"></div>
+    <div class="field"><label>Position</label><input id="neRole" placeholder="e.g. Rigger"></div>
     <div class="field"><label>Department</label><input id="neDept" placeholder="e.g. Production"></div>
     <div class="field"><label>Email</label><input id="neEmail" placeholder="name@upstage.co"></div>
-    <div class="field"><label>Pay category</label><select id="nePay"><option>Casual</option><option>Full-time</option><option>Part-time</option></select></div>
+    <div class="grid2">
+      <div class="field"><label>Employment type</label><select id="nePay"><option>Casual</option><option>Full Time</option><option>Part Time</option></select></div>
+      <div class="field"><label>Hourly rate</label><input id="neRate" type="number" step="0.5" placeholder="34.50"></div>
+    </div>
+    <div class="grid2">
+      <div class="field"><label>Manager</label><input id="neManager" placeholder="e.g. Julia Santos"></div>
+      <div class="field"><label>Default location</label><input id="neLoc" placeholder="e.g. Upstage Workshop"></div>
+    </div>
+    <div class="field"><label>Permission level</label><select id="nePerm"><option>Employee</option><option>Manager</option><option>Payroll</option><option>Admin</option></select></div>
     <button class="btn btn-accent btn-block btn-lg" id="neSave">Create Employee</button>
     <button class="btn btn-ghost btn-block" style="margin-top:8px;" id="neCancel">Cancel</button>
   </div>`;
@@ -1644,7 +1786,12 @@ function modalAddEmployee(){
   wrap.querySelector("#neSave").onclick=()=>{
     const name = wrap.querySelector("#neName").value;
     if(!name){ toast("Name is required"); return; }
-    const emp = {id:uid("emp"), name, role:wrap.querySelector("#neRole").value||"Crew", pin:"1111", status:"active", email:wrap.querySelector("#neEmail").value, department:wrap.querySelector("#neDept").value||"Production", payCategory:wrap.querySelector("#nePay").value};
+    const nextNum = DB.employees.filter(e=>e.empId&&e.empId.startsWith("EMP-")).length+1;
+    const emp = {id:uid("emp"), empId:"EMP-"+String(nextNum).padStart(3,'0'), name, role:wrap.querySelector("#neRole").value||"Crew", pin:"1111", status:"active",
+      email:wrap.querySelector("#neEmail").value, department:wrap.querySelector("#neDept").value||"Production",
+      employmentType:wrap.querySelector("#nePay").value, payCategory:wrap.querySelector("#nePay").value,
+      hourlyRate: parseFloat(wrap.querySelector("#neRate").value)||null, manager:wrap.querySelector("#neManager").value||"—",
+      defaultLocation:wrap.querySelector("#neLoc").value||"—", permission:wrap.querySelector("#nePerm").value};
     DB.employees.push(emp);
     audit(DB.session.name,"Created employee",name,`Default PIN 1111 issued`);
     save(); wrap.remove(); toast("Employee created"); go("admin-employees");
@@ -1681,45 +1828,93 @@ function modalAddJob(){
   };
 }
 
-function runReport(){
+function baseFilteredAttendance(){
   const $ = id=>document.getElementById(id);
-  const empId = $("repEmp").value, jobId = $("repJob").value, status=$("repStatus").value;
+  const empId = $("repEmp").value, jobId = $("repJob").value, status=$("repStatus").value, dept=$("repDept").value;
   const from = $("repFrom").value ? new Date($("repFrom").value) : null;
   const to = $("repTo").value ? new Date($("repTo").value+"T23:59:59") : null;
-  let rows = DB.attendance.slice();
+  let rows = DB.attendance.filter(a=> DB.employees.find(e=>e.id===a.employeeId)?.permission==="Employee" || DB.employees.find(e=>e.id===a.employeeId)?.permission==="Manager");
   if(empId) rows = rows.filter(a=>a.employeeId===empId);
   if(jobId) rows = rows.filter(a=>a.jobId===jobId);
   if(status) rows = rows.filter(a=>a.status===status);
+  if(dept) rows = rows.filter(a=> DB.employees.find(e=>e.id===a.employeeId)?.department===dept);
   if(from) rows = rows.filter(a=>new Date(a.timeIn)>=from);
   if(to) rows = rows.filter(a=>new Date(a.timeIn)<=to);
   rows.sort((a,b)=>new Date(b.timeIn)-new Date(a.timeIn));
-  const totalNet = rows.reduce((s,a)=>s+(a.netMin||0),0);
-  window.__lastReport = rows;
-  document.getElementById("reportResults").innerHTML = `
-    <div class="row-between" style="margin:16px 0 10px;"><div class="h3">${rows.length} RECORDS · ${hm(totalNet)} TOTAL</div>
+  return rows;
+}
+function runReport(){
+  const type = document.getElementById("repType").value;
+  const rows = baseFilteredAttendance();
+  const el = document.getElementById("reportResults");
+  const overtimeThreshold = DB.settings.overtimeThresholdHrs*60;
+
+  let header, tableRows, csvRows, title;
+
+  if(type==="attendance"){
+    title = `${rows.length} RECORDS · ${hm(rows.reduce((s,a)=>s+(a.netMin||0),0))} TOTAL`;
+    header = ["Date","Employee","Job","In","Out","Net","Status"];
+    tableRows = rows.map(a=>[fmtDateShort(a.timeIn), empName(a.employeeId), jobName(a.jobId), fmtTime(a.timeIn), a.timeOut?fmtTime(a.timeOut):'—', a.netMin!=null?hm(a.netMin):'—', a.status]);
+  } else if(type==="job-labour"){
+    const byJob = {};
+    rows.forEach(a=>{ const k=a.jobId; byJob[k]=byJob[k]||{}; byJob[k][a.employeeId]=(byJob[k][a.employeeId]||0)+(a.netMin||0); });
+    const flat = [];
+    Object.entries(byJob).forEach(([jobId,emps])=> Object.entries(emps).forEach(([empId,mins])=> flat.push({jobId,empId,mins})));
+    flat.sort((a,b)=> jobName(a.jobId).localeCompare(jobName(b.jobId)));
+    const rate = id => DB.employees.find(e=>e.id===id)?.hourlyRate || 0;
+    title = `${flat.length} JOB/EMPLOYEE LINES · ${hm(flat.reduce((s,f)=>s+f.mins,0))} TOTAL`;
+    header = ["Job","Employee","Hours","Labour Cost"];
+    tableRows = flat.map(f=>[jobName(f.jobId), empName(f.empId), hm(f.mins), "$"+((f.mins/60)*rate(f.empId)).toFixed(2)]);
+  } else if(type==="department"){
+    const byDept = {};
+    rows.forEach(a=>{ const d = DB.employees.find(e=>e.id===a.employeeId)?.department||"—"; byDept[d]=(byDept[d]||0)+(a.netMin||0); });
+    title = `${Object.keys(byDept).length} DEPARTMENTS`;
+    header = ["Department","Total Hours"];
+    tableRows = Object.entries(byDept).map(([d,m])=>[d, hm(m)]);
+  } else if(type==="late"){
+    const late = rows.filter(a=>{ const t=new Date(a.timeIn); return t.getHours()>8 || (t.getHours()===8 && t.getMinutes()>DB.settings.lateThresholdMin); });
+    title = `${late.length} LATE ARRIVALS`;
+    header = ["Date","Employee","Job","Clock In","Minutes Late"];
+    tableRows = late.map(a=>{ const t=new Date(a.timeIn); const lateMin = Math.max(0,(t.getHours()-8)*60+t.getMinutes()); return [fmtDateShort(a.timeIn), empName(a.employeeId), jobName(a.jobId), fmtTime(a.timeIn), lateMin+" min"]; });
+  } else if(type==="missing"){
+    const missing = rows.filter(a=>!a.timeOut && !sameDay(a.timeIn,new Date()));
+    title = `${missing.length} MISSING CLOCK-OUTS`;
+    header = ["Date","Employee","Job","Clock In"];
+    tableRows = missing.map(a=>[fmtDateShort(a.timeIn), empName(a.employeeId), jobName(a.jobId), fmtTime(a.timeIn)]);
+  } else if(type==="overtime"){
+    const ot = rows.filter(a=>a.grossMin && a.grossMin>overtimeThreshold);
+    title = `${ot.length} OVERTIME SHIFTS · Threshold ${DB.settings.overtimeThresholdHrs}h/day`;
+    header = ["Date","Employee","Job","Total Hours","Overtime"];
+    tableRows = ot.map(a=>[fmtDateShort(a.timeIn), empName(a.employeeId), jobName(a.jobId), hm(a.grossMin), hm(a.grossMin-overtimeThreshold)]);
+  } else if(type==="location"){
+    const exceptions = rows.filter(a=>a.geofence==="outside");
+    title = `${exceptions.length} LOCATION EXCEPTIONS`;
+    header = ["Date","Employee","Job","Clock In","Location"];
+    tableRows = exceptions.map(a=>[fmtDateShort(a.timeIn), empName(a.employeeId), jobName(a.jobId), fmtTime(a.timeIn), a.gpsIn.address||'—']);
+  }
+
+  window.__lastReportHeader = header; window.__lastReportRows = tableRows;
+  el.innerHTML = `
+    <div class="row-between" style="margin:16px 0 10px;"><div class="h3">${title}</div>
       <div class="row gap-8">
         <button class="btn btn-ghost btn-sm" id="expCsv">Export CSV</button>
         <button class="btn btn-ghost btn-sm" id="expPdf">Export PDF</button>
       </div>
     </div>
     <table>
-      <tr><th>Date</th><th>Employee</th><th>Job</th><th>In</th><th>Out</th><th>Net</th><th>Status</th></tr>
-      ${rows.map(a=>`<tr><td>${fmtDateShort(a.timeIn)}</td><td>${escapeHtml(empName(a.employeeId))}</td><td>${escapeHtml(jobName(a.jobId))}</td>
-        <td>${fmtTime(a.timeIn)}</td><td>${a.timeOut?fmtTime(a.timeOut):'—'}</td><td>${a.netMin!=null?hm(a.netMin):'—'}</td><td>${a.status}</td></tr>`).join("")}
+      <tr>${header.map(h=>`<th>${h}</th>`).join("")}</tr>
+      ${tableRows.map(r=>`<tr>${r.map(v=>`<td>${escapeHtml(String(v))}</td>`).join("")}</tr>`).join("")}
+      ${tableRows.length===0? `<tr><td colspan="${header.length}" class="muted" style="text-align:center;padding:16px;">No matching records</td></tr>`:""}
     </table>`;
   document.getElementById("expCsv").onclick = exportCSV;
   document.getElementById("expPdf").onclick = ()=> toast("A production build renders this via a PDF service (e.g. server-side Puppeteer or a PDF library) — CSV export is fully functional now.");
 }
 function exportCSV(){
-  const rows = window.__lastReport||[];
-  const header = ["Date","Employee","Job","Time In","Time Out","Gross Min","Unpaid Break Min","Net Min","Status"];
-  const lines = [header.join(",")];
-  rows.forEach(a=>{
-    lines.push([fmtDateShort(a.timeIn), empName(a.employeeId), jobName(a.jobId), fmtTime(a.timeIn), a.timeOut?fmtTime(a.timeOut):"", a.grossMin||"", a.unpaidBreakMin||0, a.netMin||"", a.status].map(v=>`"${String(v).replace(/"/g,'""')}"`).join(","));
-  });
+  const header = window.__lastReportHeader||[]; const rows = window.__lastReportRows||[];
+  const lines = [header.join(","), ...rows.map(r=> r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(","))];
   const blob = new Blob([lines.join("\n")], {type:"text/csv"});
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a"); link.href=url; link.download="upstage_timesheet_report.csv"; link.click();
+  const link = document.createElement("a"); link.href=url; link.download="upstage_report.csv"; link.click();
   audit(DB.session.name,"Exported report","Reports",`${rows.length} rows`); save();
 }
 
