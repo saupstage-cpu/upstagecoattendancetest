@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Upstage Co — Attendance &amp; Break Log Tool</title>
+<style>
+:root{font-family:system-ui,-apple-system,Segoe UI,sans-serif;color:#111;background:#fff}*{box-sizing:border-box}body{margin:0}#app{max-width:480px;min-height:100vh;margin:auto;padding:20px}.top{display:flex;justify-content:space-between;align-items:center}.card{background:#f6f6f6;border:1px solid #ddd;border-radius:14px;padding:16px;margin:14px 0}.muted{color:#666;font-size:.9rem}label{display:block;margin:10px 0 6px;font-weight:700}input,select,button{width:100%;padding:13px;border-radius:10px;border:1px solid #ccc;font:inherit}button{background:#111;color:#fff;border:0;font-weight:700;cursor:pointer}.secondary{background:#e9e9e9;color:#111;width:auto}.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}.warning{background:#f5b301;color:#241b00}.danger{background:#ff4d4d;color:#300}.success{background:#2fd97b;color:#052914}.pill{display:inline-block;padding:5px 10px;border-radius:99px;background:#e9e9e9;font-size:.8rem;font-weight:700}.timer{text-align:center;font:700 2.5rem ui-monospace,monospace;margin:22px 0}
+</style>
+</head>
+<body><main id="app"></main>
+<script>
+const app=document.getElementById('app');
+const state=JSON.parse(localStorage.getItem('upstage-attendance')||'null')||{user:'',job:'',clockIn:null,breakStart:null};
+const persist=()=>localStorage.setItem('upstage-attendance',JSON.stringify(state));
+const timeSince=iso=>{let n=Math.max(0,Math.floor((Date.now()-new Date(iso))/1000));return `${Math.floor(n/3600)}:${String(Math.floor(n/60)%60).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`};
+function render(){
+ if(!state.user){app.innerHTML='<h1>Upstage Co</h1><p class="muted">Attendance and Break Log Tool</p><section class="card"><label for="name">Employee name</label><input id="name" placeholder="Enter your name"><button id="login">Log In</button></section>';document.getElementById('login').onclick=()=>{state.user=document.getElementById('name').value.trim()||'Employee';persist();render()};return}
+ const working=!!state.clockIn, onBreak=!!state.breakStart;
+ app.innerHTML=`<header class="top"><div><h1>Welcome, ${state.user}</h1><span class="muted">Upstage Co</span></div><button id="logout" class="secondary">Log out</button></header><section class="card"><div class="top"><span class="muted">Status</span><span class="pill">${onBreak?'On break':working?'Working':'Not working'}</span></div><label for="job">Current job</label><select id="job" ${working?'disabled':''}><option>Upstage Workshop</option><option>ATEEZ Tour</option><option>General Office</option></select><div class="timer" id="timer">${working?timeSince(onBreak?state.breakStart:state.clockIn):'00:00:00'}</div>${!working?'<button id="clockIn">🟢 Time In</button>':onBreak?'<button id="endBreak" class="success">End Break</button>':'<div class="actions"><button id="startBreak" class="warning">Start Break</button><button id="clockOut" class="danger">Time Out</button></div>'}</section><section class="card"><h2>Attendance log</h2><p class="muted">Your current shift is stored locally in this browser.</p></section>`;
+ document.getElementById('logout').onclick=()=>{Object.assign(state,{user:'',job:'',clockIn:null,breakStart:null});persist();render()};
+ if(!working)document.getElementById('clockIn').onclick=()=>{state.clockIn=new Date().toISOString();state.job=document.getElementById('job').value;persist();render()};
+ else{document.getElementById('startBreak')?.addEventListener('click',()=>{state.breakStart=new Date().toISOString();persist();render()});document.getElementById('endBreak')?.addEventListener('click',()=>{state.breakStart=null;persist();render()});document.getElementById('clockOut')?.addEventListener('click',()=>{state.clockIn=null;state.breakStart=null;persist();render()})}
+}
+render();setInterval(()=>{const timer=document.getElementById('timer');if(timer&&state.clockIn)timer.textContent=timeSince(state.breakStart||state.clockIn)},1000);
+</script>
+</body></html>
